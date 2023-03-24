@@ -1,0 +1,147 @@
+#include <Arduino.h>
+
+#include "debug.h"
+#include "common.h"
+// #include "dc_motors.h"
+// #include "servo_motors.h"
+#include "communications.h"
+#include "stdint.h"
+#include <MedianFilterLib.h>
+
+// Camera tracking setup
+#define MY_ROBOT_ID 7
+#define IR_PIN_IN 34
+
+MedianFilter<float> medianFilter(10);
+
+RobotPose poseData;
+
+
+// PID setup
+double kp = 300; double ki=7700.0; double kd=8.125; 
+double setpoint = 0;
+int pos = 0;
+
+float convertVoltage2Distance(float input);
+float distanceBetween(float pos1[2], float pos2[2]);
+float dotProduct(float pos1[2], float pos2[2]);
+float magnitude(float vec[2]);
+float angleBetween(float vec1[2], float vec2[2]);
+// float* matrixMultiply(float A[2][2], float vec[2]);
+// float* rotationMatBetween(float vec1[2], float vec2[2]);
+// float** initRotMatrix(float theta);
+float* rotateVector(float vec[2], float theta);
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+  // setupDCMotors();
+  // setupServos();
+  setupCommunications();
+
+  // setPIDgains1(kp,ki,kd);
+
+  // servo1.attach(SERVO1_PIN, 1300, 1700);
+  // servo2.attach(SERVO2_PIN, 1300, 1700);
+  // servo3.attach(SERVO3_PIN, 1300, 1700);
+  // servo4.attach(SERVO4_PIN, 1300, 1700);
+
+  // servo1.writeMicroseconds(1500);
+  // servo2.writeMicroseconds(1500);
+}
+
+
+extern double output1;
+float robotPos[2];
+float robotTheta;
+float yUnit[2] = {0,1};
+
+
+float targetPos[2] = {500,500};
+float thetaError = 0;
+float posError = 0;
+
+
+
+void loop() {
+  poseData = getRobotPose(MY_ROBOT_ID);
+  robotTheta = (((float)poseData.theta)/1000);
+  robotPos[0] = poseData.x;
+  robotPos[1] = poseData.y;
+
+  posError = distanceBetween(robotPos, targetPos);
+  float targetVec[2] = {targetPos[0] - robotPos[0], targetPos[1] - robotPos[1]};
+  float* robotVec = rotateVector(yUnit, robotTheta);
+  thetaError = angleBetween(targetVec, robotVec);
+
+  Serial.println(thetaError);
+
+
+ 
+  
+
+  
+
+
+
+
+
+  // // IR SENSOR STUFF
+  // // Scan 180 degrees in front of robot with ir sensor and
+  // // store results in the array irReadings
+  // float irReadings[15];
+  // int index = 0;
+  // setSetpoint1(setpoint);
+  // for (int i = -700; i <= 700; i += 100) {
+  //   irReadings[index] = convertVoltage2Distance((float)analogRead(IR_PIN_IN));
+  //   index++;
+  //   setpoint = i;
+  //   setSetpoint1(setpoint);
+  //   delay(200);
+  // }
+  // irReadings[index] = convertVoltage2Distance(analogRead(IR_PIN_IN));
+  delay(1000);
+}
+
+// Return the distance in cm
+float convertVoltage2Distance(float input) {
+  return 54330*pow(input, -1.13);
+}
+
+float distanceBetween(float pos1[2], float pos2[2]) {
+  return sqrt(pow(pos1[0] - pos2[0], 2) + pow(pos1[1] - pos2[1], 2));
+}
+
+float dotProduct(float pos1[2], float pos2[2]) {
+  return (pos1[0]*pos2[0]) + (pos1[1]*pos2[1]);
+}
+
+float magnitude(float vec[2]) {
+  return sqrt(pow(vec[0], 2) + pow(vec[1], 2));
+}
+
+float angleBetween(float vec1[2], float vec2[2]) {
+  return dotProduct(vec1, vec2) / (magnitude(vec1) * magnitude(vec2));
+}
+
+// float* matrixMultiply(float A[2][2], float vec[2]) {
+//   float result[2] = {0,0};
+//   result[0] = A[0][0]*vec[0] + A[0][1]*vec[1];
+//   result[1] = A[1][0]*vec[0] + A[1][1]*vec[1];
+//   return result;
+// }
+
+
+// Theta is in degrees
+float* rotateVector(float vec[2], float theta) {
+  float vecRot[2];
+  vecRot[0] = vec[0]*cos(theta) - vec[1]*sin(theta);
+  vecRot[1] = vec[0]*sin(theta) + vec[1]*cos(theta);
+  return vecRot;
+}
+
+// float* rotationMatBetween(float vec1[2], float vec2[2]) {
+//   float theta = angleBetween(vec1, vec2);
+//   float rotMat[2][2] = {{cos(theta), sin(theta)},{-sin(theta), cos(theta)}};
+//   return rotMat;
+// }

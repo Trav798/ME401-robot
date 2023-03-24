@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "cmath": "cpp",
+        "complex": "cpp",
+        "core": "cpp",
+        "cholesky": "cpp",
+        "dense": "cpp",
+        "geometry": "cpp",
+        "alignedvector3": "cpp"
+    },
+    "cmake.sourceDirectory": "${workspaceFolder}/lib/Eigen/Eigen_Repo/bench/btl"
+}
