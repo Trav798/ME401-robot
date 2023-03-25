@@ -7,7 +7,7 @@ float distanceBetween(Vector2f origin, Vector2f point) {
 }
 
 float angleBetween(Vector2f vec1, Vector2f vec2) {
-  Serial.printf("angleBetween x: %f, y: %f\n", vec1(0), vec1(1));
+  // Serial.printf("angleBetween x: %f, y: %f\n", vec1(0), vec1(1));
   // Make clockwise positive  
   float result = (vec1(0)*vec2(1)) - (vec1(1)*vec2(0));
   int dir = 1;
@@ -31,17 +31,11 @@ int minSpeed(int input, int min) {
   return output;
 }
 
-int setServo4Speed(Servo servoMotor, int speed) {
-  int servo3Speed = minSpeed(speed, MIN_MOTOR_SPEED);
-  servoMotor.writeMicroseconds(1500 + servo3Speed);
-  return servo3Speed;
+float twoPointSlope(Vector2f point1, Vector2f point2) {
+    return (point2(0) - point1(0)) / (point2(1) - point1(1));
 }
 
-int setServo4Speed(Servo servoMotor, int speed) {
-  int servo4Speed = minSpeed(speed, MIN_MOTOR_SPEED);
-  servoMotor.writeMicroseconds(1500 - servo4Speed);
-  return servo4Speed;
-}
+
 
 // Vector2f selectTarget(RobotState robotState, BallPosition ballArray[NUM_BALLS]) {
   

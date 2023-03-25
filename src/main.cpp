@@ -15,16 +15,21 @@
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 34
-#define INDICATOR_PIN 20 // TODO select a pin
+#define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
+#define LEFT_SWITCH 18
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
-#define DRIVE_EPSILON 20
+#define DRIVE_EPSILON 50
 
 void rotateState(unsigned long lastRotUpdate);
 void driveState(unsigned long lastPosUpdate);
+void backupState();
 void standbyState();
+int setServo3Speed(int speed);
+int setServo4Speed(int speed);
+void leftLimitCallback();
 
 // MedianFilter<float> medianFilter(10);
 
@@ -35,8 +40,6 @@ double kp = 300.0; double ki=7700.0; double kd=8.125;
 double setpoint = 0;
 int pos = 0;
 
-
-
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -44,6 +47,8 @@ void setup() {
   setupServos();
   setupCommunications();
   pinMode(INDICATOR_PIN, OUTPUT);
+  pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
+  attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
 
   // setPIDgains1(kp,ki,kd);
 
@@ -57,7 +62,7 @@ void setup() {
 }
 
 
-// extern double output1;// don't need i think?
+//////////////////////////////// GLOBAL VARIABLES ///////////////////////////////////
 
 CurrentState state = ROTATE;
 RobotState robotState;
@@ -66,21 +71,22 @@ BallPosition ballArray[NUM_BALLS];
 Vector2f targetPos(0,0);
 
 const float kpDrive = .2;
-const float kpRot = 15;
+const float kpRot = 18;
 
 unsigned long lastPosUpdate = 0;
 unsigned long lastRotUpdate = 0;
 
 
 
-
+/////////////////////////////// MAIN BODY ///////////////////////////////////////
 void loop() {
   Serial.println("------------------------------");
   // Update robot info
   RobotPose poseData =  getRobotPose(MY_ROBOT_ID);
   lastPosUpdate = robotState.updateRobotPosition(poseData.x, poseData.y) ? millis() : lastPosUpdate;
   lastRotUpdate = robotState.updateRobotRotation(((float)poseData.theta)/1000) ? millis() : lastRotUpdate; 
-  Serial.printf("raw theta: %d\n", poseData.theta);
+  // Serial.printf("raw theta: %d\n", poseData.theta);
+
 
   // Update ball info
   int numBalls = getBallPositions(ballArray);
@@ -89,6 +95,7 @@ void loop() {
     targetPos(1) = (float)ballArray[0].y;
   }
   Serial.printf("targetPos: x: %f, y: %f\n", targetPos(0), targetPos(1));
+
 
   // Handle different states
   // TODO update state diagram to include nested states
@@ -99,8 +106,11 @@ void loop() {
     Serial.println("DRIVE state");
     driveState(lastPosUpdate);
   } else if (state == STANDBY) {
-    standbyState();
     Serial.println("STANDBY state");
+    standbyState();
+  } else if (state == BACKUP) {
+    Serial.println("BACKUP state");
+    backupState();
   }  else {
     Serial.println("Unknown state");
   }
@@ -132,11 +142,11 @@ void rotateState(unsigned long lastRotUpdate) {
     // calculates the current pointing error
     float thetaError = angleBetween(robotState.getFrontVector(), targetPos - robotState.getPosition());
 
-    int servo3Speed = (int)(kpRot*thetaError);
-    int servo4Speed = (int)(-1*kpRot*thetaError);
-    Serial.printf("servo3Speed: %d\n", setServo3Speed(servo3, servo3Speed)); // should work, maybe not
-    Serial.printf("servo4Speed: %d\n", setServo4Speed(servo4, servo4Speed));
-    Serial.printf("theta error: %f\n", thetaError);
+    int servoSpeed = (int)(kpRot*thetaError);
+    // int servo4Speed = (int)(-1*kpRot*thetaError);
+    Serial.printf("servo3Speed(right): %d\n", setServo3Speed(-servoSpeed)); // should work, maybe not
+    Serial.printf("servo4Speed(left): %d\n", setServo4Speed(servoSpeed));
+    // Serial.printf("theta error: %f\n", thetaError);
 
     // if the pointing error is low enough, start driving towards the ball
     rotationComplete = abs(thetaError) < ROTATION_EPSILON;
@@ -170,8 +180,8 @@ void driveState(unsigned long lastPosUpdate) {
     // do control loop, set robot linear speed
     int servoSpeed = (int)(kpDrive*distanceError);
     Serial.printf("servoSpeed: %d\n", servoSpeed);
-    setServo3Speed(servo3, servoSpeed);
-    setServo4Speed(servo4, servoSpeed);
+    setServo3Speed(servoSpeed);
+    setServo4Speed(servoSpeed);
 
     // decide if we have reached the ball
     driveComplete = distanceError < DRIVE_EPSILON;
@@ -188,6 +198,45 @@ void driveState(unsigned long lastPosUpdate) {
   }
 }
 
+// TODO make this better and not take 5 seconds
+void backupState() {
+  setServo3Speed(-100);
+  setServo4Speed(-100);
+  delay(2000);
+  setServo3Speed(50);
+  setServo4Speed(-50);
+  delay(2000);
+  setServo3Speed(-100);
+  setServo4Speed(-100);
+  delay(2000);
+  state = ROTATE;
+
+}
+
 void standbyState() {
+  servo3.writeMicroseconds(1500);
+  servo4.writeMicroseconds(1500);
   digitalWrite(INDICATOR_PIN, HIGH);
+}
+
+
+
+
+
+
+////////////////////// ADDITIONAL HELPER FUNCTIONS ////////////////////////////////
+int setServo3Speed(int speed) {
+  int servo3Speed = minSpeed(speed, MIN_MOTOR_SPEED);
+  servo3.writeMicroseconds(1500 - servo3Speed);
+  return servo3Speed;
+}
+
+int setServo4Speed(int speed) {
+  int servo4Speed = minSpeed(speed, MIN_MOTOR_SPEED);
+  servo4.writeMicroseconds(1500 + servo4Speed);
+  return servo4Speed;
+}
+
+void IRAM_ATTR leftLimitCallback() {
+  state = BACKUP;
 }
