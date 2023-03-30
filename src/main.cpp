@@ -12,12 +12,14 @@
 #include "helper_functions.h"
 #include <Eigen.h>
 #include "robot_state.h"
+#include "Servo.h"
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 34
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
+#define GATE_PIN 999 //TODO change to a real pin number
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
@@ -30,6 +32,9 @@ void standbyState();
 int setServo3Speed(int speed);
 int setServo4Speed(int speed);
 void leftLimitCallback();
+
+Servo gateMotor;
+
 
 // MedianFilter<float> medianFilter(10);
 
@@ -49,6 +54,9 @@ void setup() {
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
   attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
+  gateMotor.attatch(GATE_PIN);
+  gateMotor.write(90); //TODO: FIGURE OUT THE STARTING VALUE FOR THE SERVO MOTOR
+
 
   // setPIDgains1(kp,ki,kd);
 
@@ -194,7 +202,11 @@ void driveState(unsigned long lastPosUpdate) {
 
   // if we have reached the ball, stop
   if (driveComplete) {
-    state = STANDBY;
+    Vector2f vector1 =  targetPos - robotState.getPosition();
+    vector1 *= 1.5;
+    Vector2f targetPos = robotState.getPosition() + vector1;
+    gateMotor.write(90);//TODO: THIS IS SUPPOSED TO OPEN THE GATE
+    state = APPROACH;
   }
 }
 
@@ -219,6 +231,20 @@ void standbyState() {
   digitalWrite(INDICATOR_PIN, HIGH);
 }
 
+
+void approachState() {
+ Vector2f currentPos = robotState.getPosition();
+ if (distanceBetween(currentPos, targetPos) < 20) {
+    gateMotor.write(0); // TODO: FIGURE OUT IOF THIS IS THE RIGHT POSITION
+    delay(1000)
+    servo3.writeMicroseconds(1500);
+    servo4.writeMicroseconds(1500);
+    state = STANDBY
+  } else {
+    setServo3Speed(100);
+    setServo4Speed(100);
+  }
+ }
 
 
 
