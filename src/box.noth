@@ -12,7 +12,7 @@ enum BoxSide {
     TOPX = 1,
     LEFTY = 2,
     RIGHTY = 3,
-};
+};+3
 
 struct LinearLine {
     float slope;

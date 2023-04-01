@@ -12,18 +12,21 @@
 #include "helper_functions.h"
 #include <Eigen.h>
 #include "robot_state.h"
-#include "Servo.h"
+#include <ESP32Servo.h>
+#include <iostream>
+
+using namespace std;
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 34
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
-#define GATE_PIN 999 //TODO change to a real pin number
+#define GATE_PIN 22 
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
-#define DRIVE_EPSILON 50
+#define DRIVE_EPSILON 100
 
 void rotateState(unsigned long lastRotUpdate);
 void driveState(unsigned long lastPosUpdate);
@@ -32,6 +35,7 @@ void standbyState();
 int setServo3Speed(int speed);
 int setServo4Speed(int speed);
 void leftLimitCallback();
+Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls);
 
 Servo gateMotor;
 
@@ -53,9 +57,9 @@ void setup() {
   setupCommunications();
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
-  attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
-  gateMotor.attatch(GATE_PIN);
-  gateMotor.write(90); //TODO: FIGURE OUT THE STARTING VALUE FOR THE SERVO MOTOR
+  // attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
+  gateMotor.attach(GATE_PIN);
+  gateMotor.write(0); //TODO: FIGURE OUT THE STARTING VALUE FOR THE SERVO MOTOR
 
 
   // setPIDgains1(kp,ki,kd);
@@ -76,13 +80,15 @@ CurrentState state = ROTATE;
 RobotState robotState;
 BallPosition ballArray[NUM_BALLS];
 
-Vector2f targetPos(0,0);
+Vector2f targetPos(1000,1000);
 
 const float kpDrive = .2;
 const float kpRot = 18;
 
 unsigned long lastPosUpdate = 0;
 unsigned long lastRotUpdate = 0;
+
+bool updateTarget = true;
 
 
 
@@ -98,9 +104,11 @@ void loop() {
 
   // Update ball info
   int numBalls = getBallPositions(ballArray);
-  if (numBalls > 0) { // TODO handle multiple balls
-    targetPos(0) = (float)ballArray[0].x;
-    targetPos(1) = (float)ballArray[0].y;
+  if (updateTarget && numBalls > 0) { // TODO handle multiple balls
+    targetPos = chooseBallTarget(ballArray, numBalls);
+    // targetPos(0) = (float)ballArray[0].x;
+    // targetPos(1) = (float)ballArray[0].y;
+    updateTarget = false;
   }
   Serial.printf("targetPos: x: %f, y: %f\n", targetPos(0), targetPos(1));
 
@@ -222,7 +230,6 @@ void backupState() {
   setServo4Speed(-100);
   delay(2000);
   state = ROTATE;
-
 }
 
 void standbyState() {
@@ -234,12 +241,13 @@ void standbyState() {
 
 void approachState() {
  Vector2f currentPos = robotState.getPosition();
- if (distanceBetween(currentPos, targetPos) < 20) {
-    gateMotor.write(0); // TODO: FIGURE OUT IOF THIS IS THE RIGHT POSITION
-    delay(1000)
+ if (distanceBetween(currentPos, targetPos) < DRIVE_EPSILON / 2) {
+    gateMotor.write(75); 
+    delay(1000);
     servo3.writeMicroseconds(1500);
     servo4.writeMicroseconds(1500);
-    state = STANDBY
+    state = ROTATE;
+    updateTarget = true;
   } else {
     setServo3Speed(100);
     setServo4Speed(100);
@@ -265,4 +273,19 @@ int setServo4Speed(int speed) {
 
 void IRAM_ATTR leftLimitCallback() {
   state = BACKUP;
+}
+
+Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls) {
+  int smallest = 0;
+  float lowestDistance = distanceBetween(Eigen::Vector2f((float)balls[0].x, (float)balls[0].y), robotState.getPosition());
+  for (int i = 1; i < numBalls; i++) {
+    float tempDist = distanceBetween(Eigen::Vector2f((float)balls[i].x, (float)balls[i].y), robotState.getPosition());
+    if (tempDist < lowestDistance) {
+      smallest = i;
+      lowestDistance = tempDist;
+    }
+  }
+
+  std::cout << Eigen::Vector2f((float)balls[smallest].x, (float)balls[smallest].y) << std::endl;
+  return Eigen::Vector2f((float)balls[smallest].x, (float)balls[smallest].y);
 }

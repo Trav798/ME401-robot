@@ -16,6 +16,8 @@ enum CurrentState {
     ROTATE = 1,
     DRIVE = 2,
     BACKUP = 3,
+    APPROACH = 4,
+    TARGET = 5,
 };
 
 class RobotState {
