@@ -23,12 +23,6 @@ using namespace std;
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
 #define GATE_PIN 22 
-//////////////////////////////////////////////////////////////////////////////////
-#define ECHO_PIN 999 // EDITED BY BEN ultrasonic sensor echo pin
-#define TRIG_PIN 999 // EDITED BY BEN ultrasonic sensor trigger pin
-#define ULTA_SERVO_PIN 999 // EDITED  BY BEN servo motor pin
-#define RIGHT_SWITCH 999 //EDITED BY BEN RIGHT LIMIT SWITCH
-//////////////////////////////////////////////////////////////////////////////////
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
@@ -43,17 +37,7 @@ int setServo4Speed(int speed);
 void leftLimitCallback();
 Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls);
 
-//////////////////////////////////////////////////////////////////////////////////
 Servo gateMotor;
-Servo sensorMotor; //EDITED BY BEN sensor servo motor initilization
-const int numReadings = 100; // number of distance readings ton store
-int ultraServoPos = 0; // servo position variable
-int sensorDistance; // distance variable
-int readings[numReadings]; // array to store distance readings
-int index = 0; // index variable for readings array
-bool obstacleDetected = false; // obstacle detection flag
-//////////////////////////////////////////////////////////////////////////////////
-
 
 
 // MedianFilter<float> medianFilter(10);
@@ -73,20 +57,9 @@ void setup() {
   setupCommunications();
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
-  //////////////////////////////////////////////////////////////////////////////////
-  pinMode(RIGHT_SWITCH, INPUT_PULLDOWN); //EDITED BY BEN set right switch pinmode
-  pinMode(ECHO_PIN, INPUT); // EDITED BY BEN set sensor pin
-  pinMode(TRIG_PIN, OUTPUT);// EDITED BY BEN set sensor trigger pin
-  //////////////////////////////////////////////////////////////////////////////////
-  
   // attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
   gateMotor.attach(GATE_PIN);
   gateMotor.write(0); //TODO: FIGURE OUT THE STARTING VALUE FOR THE SERVO MOTOR
-  //////////////////////////////////////////////////////////////////////////////////
-  sensorMotor.attatch(ULTA_SERVO_PIN);
-  sensorMotor.write(0);// figure out starting write position
-  //////////////////////////////////////////////////////////////////////////////////
-
 
 
   // setPIDgains1(kp,ki,kd);
@@ -243,41 +216,6 @@ void driveState(unsigned long lastPosUpdate) {
     gateMotor.write(90);//TODO: THIS IS SUPPOSED TO OPEN THE GATE
     state = APPROACH;
   }
-
-  //////////////////////////////////////////////////////////////////////////////////
-  // check if limit switch 1 is triggered
-  if(digitalRead(LEFT_SWITCH) == LOW) {
-    sensorState();
-    state = SENSOR;
-  }
-  // check if limit switch 2 is triggered
-  else if(digitalRead(RIGHT_SWITCH) == LOW) {
-    sensorState();
-    state = SENSOR;
-  }
-  // // check for obstacle
-  // else {
-  //   // trigger ultrasonic sensor
-  //   digitalWrite(trigPin, LOW);
-  //   delayMicroseconds(2);
-  //   digitalWrite(trigPin, HIGH);
-  //   delayMicroseconds(10);
-  //   digitalWrite(trigPin, LOW);
-
-  //   // calculate distance
-  //   distance = pulseIn(echoPin, HIGH) / 58;
-
-  //   // check if obstacle is detected
-  //   if(distance < 30) {
-  //     obstacleDetected = true;
-  //     rotateServo();
-  //   }
-  //   else {
-  //     obstacleDetected = false;
-  //   }
-  // }
-  //////////////////////////////////////////////////////////////////////////////////
-
 }
 
 // TODO make this better and not take 5 seconds
@@ -314,21 +252,10 @@ void approachState() {
     setServo3Speed(100);
     setServo4Speed(100);
   }
-}
+ }
 
-//////////////////////////////////////////////////////////////////////////////////
-void sensorState() {
-  // rotate servo 180 degrees
-  for(ultraServoPos = 0; ultraServoPos <= 180; ultraServoPos += 1) {
-    myservo.write(ultraServoPos);
-    delay(15);
-    // read and store distance values
-    readings[index] = pulseIn(ECHO_PIN, HIGH) / 58; //gives distance in centimeters
-    index = (index + 1) % numReadings;
-  }
-  //add code to do something with the stored data
-}
-//////////////////////////////////////////////////////////////////////////////////
+
+
 
 
 ////////////////////// ADDITIONAL HELPER FUNCTIONS ////////////////////////////////
@@ -362,5 +289,3 @@ Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls) {
   std::cout << Eigen::Vector2f((float)balls[smallest].x, (float)balls[smallest].y) << std::endl;
   return Eigen::Vector2f((float)balls[smallest].x, (float)balls[smallest].y);
 }
-
-
