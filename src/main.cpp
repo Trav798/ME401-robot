@@ -18,15 +18,16 @@
 using namespace std;
 
 #define MY_ROBOT_ID 7
-#define IR_PIN_IN 34
+#define IR_PIN_IN 21
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
+#define RIGHT_SWITCH 19
 #define GATE_PIN 22 
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
-#define DRIVE_EPSILON 100
+#define DRIVE_EPSILON 200
 
 void rotateState(unsigned long lastRotUpdate);
 void driveState(unsigned long lastPosUpdate);
@@ -35,6 +36,7 @@ void standbyState();
 int setServo3Speed(int speed);
 int setServo4Speed(int speed);
 void leftLimitCallback();
+void rightLimitCallback();
 Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls);
 
 Servo gateMotor;
@@ -57,9 +59,10 @@ void setup() {
   setupCommunications();
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
-  // attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
+  attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
+  attachInterrupt(RIGHT_SWITCH, rightLimitCallback, RISING);
   gateMotor.attach(GATE_PIN);
-  gateMotor.write(0); //TODO: FIGURE OUT THE STARTING VALUE FOR THE SERVO MOTOR
+  gateMotor.write(80); // 80 is closed, 0 is open
 
 
   // setPIDgains1(kp,ki,kd);
@@ -131,20 +134,20 @@ void loop() {
     Serial.println("Unknown state");
   }
 
-  // // IR SENSOR STUFF
-  // // Scan 180 degrees in front of robot with ir sensor and
-  // // store results in the array irReadings
-  // float irReadings[15];
-  // int index = 0;
-  // setSetpoint1(setpoint);
-  // for (int i = -700; i <= 700; i += 100) {
-  //   irReadings[index] = convertVoltage2Distance((float)analogRead(IR_PIN_IN));
-  //   index++;
-  //   setpoint = i;
-  //   setSetpoint1(setpoint);
-  //   delay(200);
-  // }
-  // irReadings[index] = convertVoltage2Distance(analogRead(IR_PIN_IN));
+  // // // IR SENSOR STUFF
+  // // // Scan 180 degrees in front of robot with ir sensor and
+  // // // store results in the array irReadings
+  // // float irReadings[15];
+  // // int index = 0;
+  // // setSetpoint1(setpoint);
+  // // for (int i = -700; i <= 700; i += 100) {
+  // //   irReadings[index] = convertVoltage2Distance((float)analogRead(IR_PIN_IN));
+  // //   index++;
+  // //   setpoint = i;
+  // //   setSetpoint1(setpoint);
+  // //   delay(200);
+  // // }
+  // // irReadings[index] = convertVoltage2Distance(analogRead(IR_PIN_IN));
   delay(100);
 }
 
@@ -160,8 +163,8 @@ void rotateState(unsigned long lastRotUpdate) {
 
     int servoSpeed = (int)(kpRot*thetaError);
     // int servo4Speed = (int)(-1*kpRot*thetaError);
-    Serial.printf("servo3Speed(right): %d\n", setServo3Speed(-servoSpeed)); // should work, maybe not
-    Serial.printf("servo4Speed(left): %d\n", setServo4Speed(servoSpeed));
+    Serial.printf("servo3Speed(right): %d\n", setServo3Speed(servoSpeed)); // should work, maybe not
+    Serial.printf("servo4Speed(left): %d\n", setServo4Speed(-servoSpeed));
     // Serial.printf("theta error: %f\n", thetaError);
 
     // if the pointing error is low enough, start driving towards the ball
@@ -213,7 +216,7 @@ void driveState(unsigned long lastPosUpdate) {
     Vector2f vector1 =  targetPos - robotState.getPosition();
     vector1 *= 1.5;
     Vector2f targetPos = robotState.getPosition() + vector1;
-    gateMotor.write(90);//TODO: THIS IS SUPPOSED TO OPEN THE GATE
+    gateMotor.write(0);//TODO: THIS IS SUPPOSED TO OPEN THE GATE
     state = APPROACH;
   }
 }
@@ -241,8 +244,8 @@ void standbyState() {
 
 void approachState() {
  Vector2f currentPos = robotState.getPosition();
- if (distanceBetween(currentPos, targetPos) < DRIVE_EPSILON / 2) {
-    gateMotor.write(75); 
+ if (distanceBetween(currentPos, targetPos) < DRIVE_EPSILON / 4) {
+    gateMotor.write(80); 
     delay(1000);
     servo3.writeMicroseconds(1500);
     servo4.writeMicroseconds(1500);
@@ -261,17 +264,21 @@ void approachState() {
 ////////////////////// ADDITIONAL HELPER FUNCTIONS ////////////////////////////////
 int setServo3Speed(int speed) {
   int servo3Speed = minSpeed(speed, MIN_MOTOR_SPEED);
-  servo3.writeMicroseconds(1500 - servo3Speed);
+  servo3.writeMicroseconds(1500 + servo3Speed);
   return servo3Speed;
 }
 
 int setServo4Speed(int speed) {
   int servo4Speed = minSpeed(speed, MIN_MOTOR_SPEED);
-  servo4.writeMicroseconds(1500 + servo4Speed);
+  servo4.writeMicroseconds(1500 - servo4Speed);
   return servo4Speed;
 }
 
 void IRAM_ATTR leftLimitCallback() {
+  state = BACKUP;
+}
+
+void IRAM_ATTR rightLimitCallback() {
   state = BACKUP;
 }
 

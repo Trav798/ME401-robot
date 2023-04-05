@@ -2,7 +2,6 @@
 #define HELPER_FUNCTIONS_H_
 
 #include <Arduino.h>
-#include <Arduino.h>
 #undef B1 // arduino.h's definition of this macro conflicts with Eigen
 #include "Eigen.h"
 // #include "communications.h"
