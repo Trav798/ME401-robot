@@ -27,12 +27,13 @@ using namespace std;
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
-#define DRIVE_EPSILON 200
+#define DRIVE_EPSILON 250
 
 void rotateState(unsigned long lastRotUpdate);
 void driveState(unsigned long lastPosUpdate);
 void backupState();
 void standbyState();
+void approachState();
 int setServo3Speed(int speed);
 int setServo4Speed(int speed);
 void leftLimitCallback();
@@ -62,7 +63,9 @@ void setup() {
   attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
   attachInterrupt(RIGHT_SWITCH, rightLimitCallback, RISING);
   gateMotor.attach(GATE_PIN);
-  gateMotor.write(80); // 80 is closed, 0 is open
+  delay(100);
+  gateMotor.write(90); // 80 is closed, 0 is open
+  delay(500);
 
 
   // setPIDgains1(kp,ki,kd);
@@ -86,12 +89,13 @@ BallPosition ballArray[NUM_BALLS];
 Vector2f targetPos(1000,1000);
 
 const float kpDrive = .2;
-const float kpRot = 18;
+const float kpRot = 12;
 
 unsigned long lastPosUpdate = 0;
 unsigned long lastRotUpdate = 0;
 
-bool updateTarget = true;
+unsigned long updateTarget = millis() + 2500;
+int ballCount = 0;
 
 
 
@@ -107,7 +111,7 @@ void loop() {
 
   // Update ball info
   int numBalls = getBallPositions(ballArray);
-  if (updateTarget && numBalls > 0) { // TODO handle multiple balls
+  if (millis() > updateTarget && numBalls > 0) { // TODO handle multiple balls
     targetPos = chooseBallTarget(ballArray, numBalls);
     // targetPos(0) = (float)ballArray[0].x;
     // targetPos(1) = (float)ballArray[0].y;
@@ -130,6 +134,12 @@ void loop() {
   } else if (state == BACKUP) {
     Serial.println("BACKUP state");
     backupState();
+  } else if (state == APPROACH) {
+    Serial.println("APPROACH state");
+    approachState();
+  } else if (state == HOME) {
+    Serial.println("HOME state");
+    targetPos = Eigen::Vector2f(1800,200);
   }  else {
     Serial.println("Unknown state");
   }
@@ -213,10 +223,9 @@ void driveState(unsigned long lastPosUpdate) {
 
   // if we have reached the ball, stop
   if (driveComplete) {
-    Vector2f vector1 =  targetPos - robotState.getPosition();
-    vector1 *= 1.5;
-    Vector2f targetPos = robotState.getPosition() + vector1;
-    gateMotor.write(0);//TODO: THIS IS SUPPOSED TO OPEN THE GATE
+    // Vector2f vector1 =  targetPos - robotState.getPosition();
+    // vector1 *= 1.5;
+    // Vector2f targetPos = robotState.getPosition() + vector1;
     state = APPROACH;
   }
 }
@@ -228,10 +237,10 @@ void backupState() {
   delay(2000);
   setServo3Speed(50);
   setServo4Speed(-50);
-  delay(2000);
-  setServo3Speed(-100);
-  setServo4Speed(-100);
-  delay(2000);
+  delay(800);
+  setServo3Speed(100);
+  setServo4Speed(100);
+  delay(3000);
   state = ROTATE;
 }
 
@@ -243,18 +252,18 @@ void standbyState() {
 
 
 void approachState() {
- Vector2f currentPos = robotState.getPosition();
- if (distanceBetween(currentPos, targetPos) < DRIVE_EPSILON / 4) {
-    gateMotor.write(80); 
-    delay(1000);
-    servo3.writeMicroseconds(1500);
-    servo4.writeMicroseconds(1500);
-    state = ROTATE;
-    updateTarget = true;
-  } else {
-    setServo3Speed(100);
-    setServo4Speed(100);
-  }
+//  Vector2f currentPos = robotState.getPosition();
+  gateMotor.write(15);
+  setServo3Speed(100);
+  setServo4Speed(100);
+  delay(1000);
+  gateMotor.write(90); 
+  delay(500);
+  servo3.writeMicroseconds(1500);
+  servo4.writeMicroseconds(1500);
+  state = ROTATE;
+  updateTarget = millis();
+  ballCount++;
  }
 
 

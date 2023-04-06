@@ -18,6 +18,7 @@ enum CurrentState {
     BACKUP = 3,
     APPROACH = 4,
     TARGET = 5,
+    HOME = 6,
 };
 
 class RobotState {
