@@ -19,11 +19,13 @@ using namespace std;
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 21
+#define IR_SERVO_PIN 999
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
 #define RIGHT_SWITCH 19
 #define GATE_PIN 22 
+
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .2
@@ -41,6 +43,8 @@ void rightLimitCallback();
 Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls);
 
 Servo gateMotor;
+Servo irMotor;
+
 
 
 // MedianFilter<float> medianFilter(10);
@@ -60,6 +64,8 @@ void setup() {
   setupCommunications();
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
+  pinMode(RIGHT_SWITCH, INPUT_PULLDOWN);
+  pinMode(IR_PIN_IN, INPUT);
   attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
   attachInterrupt(RIGHT_SWITCH, rightLimitCallback, RISING);
   gateMotor.attach(GATE_PIN);
@@ -67,6 +73,8 @@ void setup() {
   gateMotor.write(90); // 80 is closed, 0 is open
   delay(500);
 
+  // irMotor.attach(IR_SERVO_PIN);
+  // irMotor.write(80);//TODO: The DC motor doesn't use the servo library
 
   // setPIDgains1(kp,ki,kd);
 
@@ -232,16 +240,41 @@ void driveState(unsigned long lastPosUpdate) {
 
 // TODO make this better and not take 5 seconds
 void backupState() {
-  setServo3Speed(-100);
-  setServo4Speed(-100);
+
+  // if (digitalRead(RIGHT_SWITCH) == LOW){
+  //   servo3.writeMicroseconds(-100);
+  //   servo4.writeMicroseconds(-75);
+  // } else if (digitalRead(LEFT_SWITCH) == LOW) {
+  //   servo3.writeMicroseconds(-75);
+  //   servo4.writeMicroseconds(-100);
+  // } else {
+  //   servo3.writeMicroseconds(-100);
+  //   servo4.writeMicroseconds(-100);
+  // }
+  
+  servo3.writeMicroseconds(-100);
+  servo4.writeMicroseconds(-100);
   delay(2000);
-  setServo3Speed(50);
-  setServo4Speed(-50);
-  delay(800);
-  setServo3Speed(100);
-  setServo4Speed(100);
-  delay(3000);
-  state = ROTATE;
+
+  int distances[18]; // Array to store distances
+  int irServoPos = 0; // Current servo position //TODO: Find the right value for this position
+  irMotor.write(irServoPos);
+  //MAYBE A DELAY HERE SO THE SERVO CAN REACH HOME BEFORE ANOTHER SCAN
+  for (irServoPos = 0; irServoPos <= 180; irServoPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
+      irMotor.write(irServoPos);
+      delay(15);
+      distances[irServoPos] = analogRead(IR_PIN_IN);
+  }
+  int biggestDifference = 0;
+  int rotationMultiplier = 0;
+  for (int i = 1; i < 17; i++) {
+    int difference = abs(distances[i+1] - distances[i]);
+    if (difference > biggestDifference) {
+      biggestDifference = distances[i];
+      rotationMultiplier = i;
+    }
+  }
+
 }
 
 void standbyState() {
