@@ -25,7 +25,7 @@ using namespace std;
 #define LEFT_SWITCH 18
 #define RIGHT_SWITCH 19
 #define GATE_PIN 22 
-#define HOME_POS (1800,200)
+#define HOME_POS 1800,200
 
 
 #define MOVEMENT_TIMEOUT 500
@@ -36,6 +36,7 @@ void ballState(unsigned long lastRotUpdate);
 void backupState();
 void standbyState(int numBalls);
 void approachState();
+void homeState();
 int setServo3Speed(int speed);
 int setServo4Speed(int speed);
 void leftLimitCallback();
@@ -96,7 +97,6 @@ void setup() {
 
 
 //////////////////////////////// GLOBAL VARIABLES ///////////////////////////////////
-
 CurrentState state = BALL;
 RobotState robotState;
 BallPosition ballArray[NUM_BALLS];
@@ -175,7 +175,7 @@ void loop() {
 
 ////////////////////////// STATES /////////////////////
 void ballState(unsigned long lastPosUpdate) {
-  float distanceError = 999999;
+  float distanceError = 2*DRIVE_EPSILON;
   if (millis() - lastPosUpdate < MOVEMENT_TIMEOUT) {
     distanceError = moveToTarget();
   } else {
@@ -223,7 +223,6 @@ void backupState() {
       rotationMultiplier = i;
     }
   }
-
 }
 
 void standbyState(int numBalls) {
@@ -258,6 +257,7 @@ void approachState() {
  void homeState() {
   float distanceError = moveToTarget();
 
+  // release the balls
   if (distanceError < 1.5*DRIVE_EPSILON) {
     openGate();
     setServo3Speed(-100);
@@ -346,7 +346,7 @@ float moveToTarget() {
     if (abs(thetaError) > 2*ROTATION_EPSILON) {
       Serial.println("Off course, rotating");
       rotating = true;
-      return;
+      return distanceError;
     }
   }
   return distanceError;
@@ -366,5 +366,5 @@ void closeGate() {
 }
 
 void edgeScan(Vector2f edges[2]) {
-  
+
 }
