@@ -42,9 +42,6 @@ void leftLimitCallback();
 void rightLimitCallback();
 Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls);
 
-Servo gateMotor;
-Servo irMotor;
-
 
 
 // MedianFilter<float> medianFilter(10);
@@ -55,6 +52,7 @@ Servo irMotor;
 double kp = 300.0; double ki=7700.0; double kd=8.125; 
 double setpoint = 0;
 int pos = 0;
+Servo gateMotor;
 
 void setup() {
   // put your setup code here, to run once:
@@ -62,21 +60,20 @@ void setup() {
   setupDCMotors();
   setupServos();
   setupCommunications();
+
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
   pinMode(RIGHT_SWITCH, INPUT_PULLDOWN);
   pinMode(IR_PIN_IN, INPUT);
   attachInterrupt(LEFT_SWITCH, leftLimitCallback, RISING);
   attachInterrupt(RIGHT_SWITCH, rightLimitCallback, RISING);
+
   gateMotor.attach(GATE_PIN);
   delay(100);
   gateMotor.write(90); // 80 is closed, 0 is open
   delay(500);
+  setPIDgains1(kp,ki,kd);
 
-  // irMotor.attach(IR_SERVO_PIN);
-  // irMotor.write(80);//TODO: The DC motor doesn't use the servo library
-
-  // setPIDgains1(kp,ki,kd);
 
   // servo1.attach(SERVO1_PIN, 1300, 1700);
   // servo2.attach(SERVO2_PIN, 1300, 1700);
@@ -145,9 +142,6 @@ void loop() {
   } else if (state == APPROACH) {
     Serial.println("APPROACH state");
     approachState();
-  } else if (state == HOME) {
-    Serial.println("HOME state");
-    targetPos = Eigen::Vector2f(1800,200);
   }  else {
     Serial.println("Unknown state");
   }
@@ -258,10 +252,10 @@ void backupState() {
 
   int distances[18]; // Array to store distances
   int irServoPos = 0; // Current servo position //TODO: Find the right value for this position
-  irMotor.write(irServoPos);
+  // irMotor.write(irServoPos); //TODO: use setSetpoint1() instead of .write
   //MAYBE A DELAY HERE SO THE SERVO CAN REACH HOME BEFORE ANOTHER SCAN
   for (irServoPos = 0; irServoPos <= 180; irServoPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
-      irMotor.write(irServoPos);
+      // irMotor.write(irServoPos);
       delay(15);
       distances[irServoPos] = analogRead(IR_PIN_IN);
   }
