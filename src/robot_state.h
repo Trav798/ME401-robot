@@ -13,11 +13,10 @@ using namespace Eigen;
 
 enum CurrentState {
     STANDBY = 0,
-    ROTATE = 1,
-    DRIVE = 2,
-    BACKUP = 3,
-    APPROACH = 4,
-    TARGET = 5,
+    BALL = 1,
+    BACKUP = 2,
+    APPROACH = 3,
+    HOME = 4,
 };
 
 class RobotState {
