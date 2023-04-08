@@ -241,30 +241,67 @@ void backupState() {
   //   servo3.writeMicroseconds(-100);
   //   servo4.writeMicroseconds(-100);
   // }
-  setsertvo3speeed
-  
-  servo3.writeMicroseconds(-100);
-  servo4.writeMicroseconds(-100);
-  delay(2000)
+
+  //backup robot before scanning
+  setServo3Speed(-100);
+  setServo4Speed(-100);
+  delay(1000)
+  servo3.writeMicroseconds(1500);
+  servo4.writeMicroseconds(1500);
 
   int distances[18]; // Array to store distances
-  int irServoPos = 0; // Current servo position //TODO: Find the right value for this position
-  irMotor.write(irServoPos);
+  int irServoPos = 0; // Current servo position //TODO: Find the right value for this position(should be far left position)
+  irMotor.write(irServoPos); 
+
   //MAYBE A DELAY HERE SO THE SERVO CAN REACH HOME BEFORE ANOTHER SCAN
+
+  // Scan 18 times by changing the dc motor position by 10 degrees each time and then taking a scan TODO: change motor from Servo to DC
   for (irServoPos = 0; irServoPos <= 180; irServoPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
       irMotor.write(irServoPos);
-      delay(15);
+      delay(100);
       distances[irServoPos] = analogRead(IR_PIN_IN);
   }
-  int biggestDifference = 0;
-  int rotationMultiplier = 0;
+
+  //take array and find biggest difference as well as the smallest distance used for vector calculation, also finds angle from getfrontvector
+  float biggestDifference = 0.0;
+  float smallestDistance = 0.0;
+  int anglePos = 0;
   for (int i = 1; i < 17; i++) {
-    int difference = abs(distances[i+1] - distances[i]);
+    int difference = abs(distances[i] - distances[i-1]);
     if (difference > biggestDifference) {
-      biggestDifference = distances[i];
-      rotationMultiplier = i;
+      if (distances[i] > distances[i-1]){
+        biggestDifference = difference;
+        smallestDistance = distances[i-1];
+        if (i < 9) {
+          anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
+        } else if ( i > 9) {
+          anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
+        } else {
+          anglePos = -15 * M_PI/180;
+        }
+      }
+      else {
+        biggestDifference = difference;
+        smallestDistance = distances[i];
+        if (i < 9) {
+          anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
+        } else if ( i > 9) {
+          anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
+        } else {
+          anglePos = 0;
+        }
+      } 
     }
+    Vector2f avoidVector =  Eigen::Rotation2D(anglePos) * robotState.getFrontVector();
+    avoidVector = avoidVector * (1.5 * smallestDistance);
+
+
+
   }
+  
+
+  
+
 
 }
 
