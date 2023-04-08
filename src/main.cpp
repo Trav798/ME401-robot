@@ -19,7 +19,7 @@ using namespace std;
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 21
-#define IR_SERVO_PIN 999
+// #define IR_SERVO_PIN 999
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
@@ -46,6 +46,7 @@ float moveToTarget();
 void stopRobot();
 void openGate();
 void closeGate();
+void setDC(int rot);
 
 
 
@@ -204,21 +205,20 @@ void backupState() {
   //backup robot before scanning
   setServo3Speed(-100);
   setServo4Speed(-100);
-  delay(1000)
-  servo3.writeMicroseconds(1500);
-  servo4.writeMicroseconds(1500);
+  delay(1000);
+  stopRobot();
 
   int distances[18]; // Array to store distances
-  int irServoPos = 0; // Current servo position //TODO: Find the right value for this position(should be far left position)
-  irMotor.write(irServoPos); 
+  int irDCPos = 0; // Current servo position //TODO: Find the right value for this position(should be far left position)
+  setDC(irDCPos);
 
   //MAYBE A DELAY HERE SO THE SERVO CAN REACH HOME BEFORE ANOTHER SCAN
 
   // Scan 18 times by changing the dc motor position by 10 degrees each time and then taking a scan TODO: change motor from Servo to DC
-  for (irServoPos = 0; irServoPos <= 180; irServoPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
-      // irMotor.write(irServoPos);
-      delay(15);
-      distances[irServoPos] = analogRead(IR_PIN_IN);
+  for (irDCPos = 0; irDCPos <= 180; irDCPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
+      setDC(irDCPos);
+      delay(1000);
+      distances[irDCPos] = analogRead(IR_PIN_IN);
   }
 
   //take array and find biggest difference as well as the smallest distance used for vector calculation, also finds angle from getfrontvector
@@ -247,12 +247,15 @@ void backupState() {
         } else if ( i > 9) {
           anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
         } else {
-          anglePos = 0;
+          anglePos = -15 * M_PI/180;
         }
       } 
     }
-    Vector2f avoidVector =  Eigen::Rotation2D(anglePos) * robotState.getFrontVector();
+    Vector2f avoidVector =  Eigen::Rotation2Df(anglePos) * robotState.getFrontVector();
     avoidVector = avoidVector * (1.5 * smallestDistance);
+
+    Serial.println("avoidVector");
+    cout << avoidVector << endl;
 
 
 
@@ -404,6 +407,6 @@ void closeGate() {
   gateMotor.write(90);
 }
 
-void edgeScan(Vector2f edges[2]) {
-
+void setDC(int rot) {
+  setSetpoint1(map(0, 180, 0, 1400,rot));
 }
