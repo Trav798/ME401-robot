@@ -18,19 +18,20 @@
 using namespace std;
 
 #define MY_ROBOT_ID 7
-#define IR_PIN_IN 21
+#define IR_PIN_IN 35
 // #define IR_SERVO_PIN 999
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
 #define RIGHT_SWITCH 19
 #define GATE_PIN 22 
-#define HOME_POS 1800,200
+#define HOME_POS 1950,50
 
 
 #define MOVEMENT_TIMEOUT 500
-#define ROTATION_EPSILON .2
+#define ROTATION_EPSILON .1
 #define DRIVE_EPSILON 250
+#define MAX_BALLS 4
 
 void ballState(unsigned long lastRotUpdate);
 void backupState();
@@ -46,7 +47,7 @@ float moveToTarget();
 void stopRobot();
 void openGate();
 void closeGate();
-void setDC(int rot);
+void setDC(double rot);
 
 
 
@@ -55,7 +56,9 @@ void setDC(int rot);
 
 
 // PID setup
-double kp = 300.0; double ki=7700.0; double kd=8.125; 
+double kp = 300.0; double ki=7700.0; double kd=8.125;
+// double kp = 100.0; double ki=0.0; double kd=0.0; 
+// double kp = 6000; double ki=79470; double kd=1130.25; 
 double setpoint = 0;
 int pos = 0;
 Servo gateMotor;
@@ -105,7 +108,7 @@ BallPosition ballArray[NUM_BALLS];
 Vector2f targetPos(HOME_POS);
 
 const float kpDrive = .2;
-const float kpRot = 12;
+const float kpRot = 6;
 bool rotating = true;
 
 unsigned long updateTarget = millis();
@@ -138,8 +141,6 @@ void loop() {
     // targetPos(0) = (float)ballArray[0].x;
     // targetPos(1) = (float)ballArray[0].y;
     updateTarget = millis() + 2500;
-  } else if (numBalls == 0) {
-    state = STANDBY;
   }
   Serial.printf("targetPos: x: %f, y: %f\n", targetPos(0), targetPos(1));
 
@@ -164,7 +165,7 @@ void loop() {
     Serial.println("Unknown state");
   }
 
-  delay(100);
+  delay(50);
 }
 
 
@@ -208,18 +209,22 @@ void backupState() {
   delay(1000);
   stopRobot();
 
-  int distances[18]; // Array to store distances
+  int distances[19]; // Array to store distances
   int irDCPos = 0; // Current servo position //TODO: Find the right value for this position(should be far left position)
   setDC(irDCPos);
 
   //MAYBE A DELAY HERE SO THE SERVO CAN REACH HOME BEFORE ANOTHER SCAN
 
   // Scan 18 times by changing the dc motor position by 10 degrees each time and then taking a scan TODO: change motor from Servo to DC
-  for (irDCPos = 0; irDCPos <= 180; irDCPos += 10) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
-      setDC(irDCPos);
-      delay(1000);
-      distances[irDCPos] = analogRead(IR_PIN_IN);
+  for (irDCPos = 0; irDCPos <= 18; irDCPos++) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
+      Serial.printf("irDCPos: %f\n", (double)irDCPos*-10);
+      Serial.printf("motorPos: %f\n", getPosition1());
+      setDC((double)irDCPos*10);
+      delay(250);
+      distances[irDCPos] = convertVoltage2Distance(analogRead(IR_PIN_IN));
+      delay(50);
   }
+  setDC(0);
 
   //take array and find biggest difference as well as the smallest distance used for vector calculation, also finds angle from getfrontvector
   float biggestDifference = 0.0;
@@ -278,20 +283,20 @@ void standbyState(int numBalls) {
 
 void approachState() {
 //  Vector2f currentPos = robotState.getPosition();
-  openGate();
+  // openGate();
   setServo3Speed(100);
   setServo4Speed(100);
-  delay(1000);
-  closeGate();
-  delay(500);
+  delay(2000);
+  // closeGate();
   stopRobot();
 
   ballCount++;
-  if (ballCount > 3) {
+  if (ballCount > MAX_BALLS) {
     freezeTarget = true;
     targetPos = Eigen::Vector2f(HOME_POS);
     state = HOME;
   } else {
+    updateTarget = millis()-10;
     state = BALL;
   }
  }
@@ -300,15 +305,20 @@ void approachState() {
   float distanceError = moveToTarget();
 
   // release the balls
-  if (distanceError < 1.5*DRIVE_EPSILON) {
+  if (distanceError < DRIVE_EPSILON/3) {
+    Serial.println("Releasing balls");
+    stopRobot();
     openGate();
+    delay(1000);
     setServo3Speed(-100);
     setServo4Speed(-100);
-    delay(1500);
+    delay(2500);
     closeGate();
 
     freezeTarget = false;
     rotating = true;
+    targetPos = Eigen::Vector2f(1000,1000); // so it doesn't immediately try to approach
+    ballCount = 0;
     state = BALL;
   }
  }
@@ -344,12 +354,16 @@ void IRAM_ATTR rightLimitCallback() {
   state = BACKUP;
 }
 
+
+//TODO: CHANGE THIS FUNCTION TO IGNORE BALLS THAT ARE NEAR THE HOME POSITION
 Vector2f chooseBallTarget(BallPosition balls[NUM_BALLS], int numBalls) {
-  int smallest = 0;
+  int smallest = -1;
   float lowestDistance = distanceBetween(Eigen::Vector2f((float)balls[0].x, (float)balls[0].y), robotState.getPosition());
   for (int i = 1; i < numBalls; i++) {
-    float tempDist = distanceBetween(Eigen::Vector2f((float)balls[i].x, (float)balls[i].y), robotState.getPosition());
-    if (tempDist < lowestDistance) {
+    Vector2f ballPos((float)balls[i].x, (float)balls[i].y);
+    float tempDist = distanceBetween(ballPos, robotState.getPosition());
+    float homeDist = distanceBetween(ballPos, Eigen::Vector2f(HOME_POS));
+    if (tempDist < lowestDistance && homeDist > 3*DRIVE_EPSILON) {
       smallest = i;
       lowestDistance = tempDist;
     }
@@ -400,13 +414,13 @@ void stopRobot() {
 }
 
 void openGate() {
-  gateMotor.write(15);
+  gateMotor.write(0);
 }
 
 void closeGate() {
   gateMotor.write(90);
 }
 
-void setDC(int rot) {
-  setSetpoint1(map(0, 180, 0, 1400,rot));
+void setDC(double rot) {
+  setSetpoint1(((-rot)/180)*1400);
 }

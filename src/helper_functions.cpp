@@ -35,6 +35,10 @@ float twoPointSlope(Vector2f point1, Vector2f point2) {
     return (point2(0) - point1(0)) / (point2(1) - point1(1));
 }
 
+float convertVoltage2Distance(float input) {
+  return 54330*pow(input, -1.13);
+}
+
 
 
 // Vector2f selectTarget(RobotState robotState, BallPosition ballArray[NUM_BALLS]) {
