@@ -17,7 +17,7 @@ float distanceBetween(Vector2f origin, Vector2f point);
 float rad2deg(float rad);
 int minSpeed(int input, int min);
 float twoPointSlope(Vector2f point1, Vector2f point2);
-float convertVoltage2Distance(float input);
+float convertVoltage2Distance(int input);
 
 
 #endif

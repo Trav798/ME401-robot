@@ -35,8 +35,8 @@ float twoPointSlope(Vector2f point1, Vector2f point2) {
     return (point2(0) - point1(0)) / (point2(1) - point1(1));
 }
 
-float convertVoltage2Distance(float input) {
-  return 54330*pow(input, -1.13);
+float convertVoltage2Distance(int input) {
+  return 543298*pow((double)input, -1.13);
 }
 
 

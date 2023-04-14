@@ -19,20 +19,23 @@ using namespace std;
 
 #define MY_ROBOT_ID 7
 #define IR_PIN_IN 35
-// #define IR_SERVO_PIN 999
 #define INDICATOR_PIN 5
 #define MIN_MOTOR_SPEED 20
 #define LEFT_SWITCH 18
 #define RIGHT_SWITCH 19
-#define GATE_PIN 22 
-#define HOME_POS 1870,130
-#define OBSTACLE_EPSILON 300
+#define GATE_PIN 16 
+#define HOME_POS 1870,1870
+// #define HOME_POS 130, 130
+#define OBSTACLE_EPSILON 200
+#define AVOID_TO_FAR_EPSILON 500
+#define BALL_RELEASE_TIME 270000
+#define DRIVE_HOME_TIME 210000
 
 
 #define MOVEMENT_TIMEOUT 500
 #define ROTATION_EPSILON .1
 #define DRIVE_EPSILON 250
-#define MAX_BALLS 4
+#define MAX_BALLS 9999
 
 void ballState();
 void backupState();
@@ -57,9 +60,9 @@ void setDC(double rot);
 
 
 // PID setup
-// double kp = 100.0; double ki=7700.0; double kd=8.125; // was 100, 7700, 8.125
-// double kp = 100.0; double ki=0.0; double kd=0.0; 
-double kp = 6000; double ki=79470; double kd=1130.25; 
+double kp = 300.0; double ki=7700.0; double kd=8.125; // was 100, 7700, 8.125
+// double kp = .3; double ki=7.7; double kd = .008125; 
+// double kp = 6000; double ki=79470; double kd=1130.25; 
 double setpoint = 0;
 int pos = 0;
 Servo gateMotor;
@@ -69,7 +72,7 @@ void setup() {
   Serial.begin(115200);
   setupDCMotors();
   setupServos();
-  setupCommunications();
+  // setupCommunications();
 
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
@@ -129,6 +132,7 @@ unsigned long lastPosUpdate = 0;
 
 /////////////////////////////// MAIN BODY ///////////////////////////////////////
 void loop() {
+  // closeGate();
   Serial.println("------------------------------");
   // Update robot info
   RobotPose poseData =  getRobotPose(MY_ROBOT_ID);
@@ -144,13 +148,17 @@ void loop() {
     if(numBalls > 0 && chooseBallTarget(ballArray, numBalls)) {
       updateTarget = millis() + 2500;
     } else {
-      freezeTarget = true;
-      rotating = true;
-      targetPos = Eigen::Vector2f(HOME_POS);
-      state = HOME;
+      stopRobot();
     }
   }
   Serial.printf("targetPos: x: %f, y: %f\n", targetPos(0), targetPos(1));
+
+  if(millis() > DRIVE_HOME_TIME && state != STANDBY) {
+    freezeTarget = true;
+    rotating = true;
+    targetPos = Eigen::Vector2f(HOME_POS);
+    state = HOME;
+  }
 
 
   // Handle different states
@@ -185,6 +193,7 @@ void loop() {
 
 ////////////////////////// STATES /////////////////////
 void ballState() {
+
   float distanceError = 2*DRIVE_EPSILON;
   if (millis() - lastPosUpdate < MOVEMENT_TIMEOUT) {
     distanceError = moveToTarget();
@@ -199,125 +208,147 @@ void ballState() {
 }
 
 void backupState() {
-  if (firstBackup) {
-    //backup robot before scanning
-    setServo3Speed(-100);
-    setServo4Speed(-100);
-    delay(1000);
-    stopRobot();
+  Serial.println("Dumb backup started");
+  setServo3Speed(-300);
+  setServo4Speed(-300);
+  delay(1000);
+  setServo3Speed(-50);
+  setServo4Speed(50);
+  delay(1000);
+  setServo3Speed(300);
+  setServo4Speed(300);
+  delay(3000);
+  state = BALL;
+  return;
+  // if (firstBackup) {
+  //   //backup robot before scanning
+  //   setServo3Speed(-100);
+  //   setServo4Speed(-100);
+  //   delay(1000);
+  //   stopRobot();
 
-    float distances[19]; // Array to store distances
-    setDC(0);
-    delay(500);
-    // Scan 18 times by changing the dc motor position by 10 degrees each time and then taking a scan TODO: change motor from Servo to DC
-    for (int irDCPos = 0; irDCPos <= 18; irDCPos++) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
-        setDC((double)irDCPos*10);
-        delay(250);
-        distances[irDCPos] = convertVoltage2Distance(analogRead(IR_PIN_IN));
-        delay(50);
-    }
-    setDC(0);
+  //   float distances[19]; // Array to store distances
+  //   setDC(0);
+  //   delay(500);
+  //   // Scan 18 times by changing the dc motor position by 10 degrees each time and then taking a scan TODO: change motor from Servo to DC
+  //   for (int irDCPos = 0; irDCPos <= 18; irDCPos++) { //TODO, THE INITIAL AND FINAL POSITION WILL BE DETERMIONED UPON TESTING (MOST LIKELY NOT JUST 0 AND 180 BUT 45 AND 225)
+  //       setDC((double)irDCPos*10);
+  //       delay(350);
+  //       int sensorValue = analogRead(IR_PIN_IN) + 1;
+  //       distances[irDCPos] = convertVoltage2Distance(sensorValue);
+  //       Serial.printf("Measured Distances: %f\n", distances[irDCPos]);
+  //       Serial.printf("ADC Value: %d\n", sensorValue);
+  //       delay(50);
+  //   }
+  //   setDC(0);
     
 
-    // this for loop should populate obstacleEdges with the positions the robot needs to go to to pass all obstacle edges
-    Vector2f avoidVectors[4] = {Eigen::Vector2f(0,0), Eigen::Vector2f(0,0), Eigen::Vector2f(0,0), Eigen::Vector2f(0,0)};
-    int len = 0;
-    // 85 75 65 55 45 35 25 15 5 -5 -15 -25 -35 -45 -55 -65 -75 -85
-    for(int i = 0; i < 18; i++) {
-      float distanceDiff = abs(distances[i] - distances[i+1]);
-      // the scan starts all the way to the left and moves clockwise. If avoidDir = 1, avoid to the left. If it is negative, avoid to the right
-      float avoidDir = (distances[i] - distances[i+1]) / distanceDiff;
-      float currentAngle = 85 - (10*i);
-      if (distanceDiff > OBSTACLE_EPSILON) {
-        avoidVectors[i] = robotState.getPosition() + (Eigen::Rotation2Df(currentAngle + (avoidDir*15)) * robotState.getFrontVector() * 500); // TODO: 500 is a magic number rn
-        len++;
-      }
-      if(len > 4) { // so we don't go beyond the bounds of the array
-        break;
-      }
-    }
+  //   // this for loop should populate obstacleEdges with the positions the robot needs to go to to pass all obstacle edges
+  //   Vector2f avoidVectors[2] = {Eigen::Vector2f(0,0), Eigen::Vector2f(0,0)};
+  //   int len = 0;
+  //   // 85 75 65 55 45 35 25 15 5 -5 -15 -25 -35 -45 -55 -65 -75 -85
+  //   for(int i = 0; i < 18; i++) {
+  //     float distanceDiff = abs(distances[i] - distances[i+1]);
+  //     // the scan starts all the way to the left and moves clockwise. If avoidDir = 1, avoid to the left. If it is negative, avoid to the right
+  //     float avoidDir = (distances[i] - distances[i+1]) / distanceDiff;
+  //     float currentAngle = 85 - (10*i);
+  //     if (abs(distanceDiff) > OBSTACLE_EPSILON) {
+  //       avoidVectors[i] = robotState.getPosition() + (Eigen::Rotation2Df(currentAngle + (avoidDir*15)) * robotState.getFrontVector() * 500); // TODO: 500 is a magic number rn
+  //       len++;
+  //     }
+  //     if(len > 1) { // so we don't go beyond the bounds of the array
+  //       break;
+  //     }
+  //   }
 
-    // if not way around the obstacle is detected
-    if (len == 0) {
-      setServo3Speed(-50);
-      setServo4Speed(50);
-      delay(1000);
-      setServo3Speed(100);
-      setServo4Speed(100);
-      delay(3000);
-      return;
-    } 
+  //   int smallestIndex = 0;
+  //   float smallest = distanceBetween(avoidVectors[0], robotState.getPosition());
+  //   for (int i = 1; i < len - 1; i++) {
+  //     float tempDist = distanceBetween(avoidVectors[i], robotState.getPosition());
+  //     if (tempDist < smallest) {
+  //       smallestIndex = i;
+  //       smallest = tempDist;
+  //     }
+  //   }
 
-    int smallestIndex = 0;
-    float smallest = distanceBetween(avoidVectors[0], robotState.getPosition());
-    for (int i = 1; i < len - 1; i++) {
-      float tempDist = distanceBetween(avoidVectors[i], robotState.getPosition());
-      if (tempDist < smallest) {
-        smallestIndex = i;
-        smallest = tempDist;
-      }
-    }
+  //   // if not way around the obstacle is detected
+  //   if (len == 0 || avoidVectors[smallestIndex].norm() > AVOID_TO_FAR_EPSILON) {
+  //     Serial.println("Dumb backup started");
+  //     setServo3Speed(-300);
+  //     setServo4Speed(-300);
+  //     delay(1000);
+  //     setServo3Speed(-50);
+  //     setServo4Speed(50);
+  //     delay(1000);
+  //     setServo3Speed(300);
+  //     setServo4Speed(300);
+  //     delay(3000);
+  //     state = BALL;
+  //     return;
+  //   } 
 
-    targetPos = avoidVectors[smallestIndex];
+  //   Serial.printf("avoidVector x: %f, y: %f, z: %f\n");
+  //   targetPos = avoidVectors[smallestIndex];
 
-    freezeTarget = true;
-    firstBackup = false;
+
+  //   freezeTarget = true;
+  //   firstBackup = false;
 
 
     
 
-    // //take array and find biggest difference as well as the smallest distance used for vector calculation, also finds angle from getfrontvector
-    // float biggestDifference = 0.0;
-    // float smallestDistance = 0.0;
-    // int anglePos = 0;
-    // for (int i = 1; i < 17; i++) {
-    //   int difference = abs(distances[i] - distances[i-1]);
-    //   if (difference > biggestDifference) {
-    //     if (distances[i] > distances[i-1]){
-    //       biggestDifference = difference;
-    //       smallestDistance = distances[i-1];
-    //       if (i < 9) {
-    //         anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
-    //       } else if ( i > 9) {
-    //         anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
-    //       } else {
-    //         anglePos = -15 * M_PI/180;
-    //       }
-    //     }
-    //     else {
-    //       biggestDifference = difference;
-    //       smallestDistance = distances[i];
-    //       if (i < 9) {
-    //         anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
-    //       } else if ( i > 9) {
-    //         anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
-    //       } else {
-    //         anglePos = -15 * M_PI/180;
-    //       }
-    //     } 
-    //   }
-      // Vector2f avoidVector =  Eigen::Rotation2Df(anglePos) * robotState.getFrontVector();
-      // avoidVector = avoidVector * (1.5 * smallestDistance);
-      // targetPos = robotState.getPosition() + avoidVector;
-      // freezeTarget = true;
-      // firstBackup = false;
-    // }
-  } else {
+  //   // //take array and find biggest difference as well as the smallest distance used for vector calculation, also finds angle from getfrontvector
+  //   // float biggestDifference = 0.0;
+  //   // float smallestDistance = 0.0;
+  //   // int anglePos = 0;
+  //   // for (int i = 1; i < 17; i++) {
+  //   //   int difference = abs(distances[i] - distances[i-1]);
+  //   //   if (difference > biggestDifference) {
+  //   //     if (distances[i] > distances[i-1]){
+  //   //       biggestDifference = difference;
+  //   //       smallestDistance = distances[i-1];
+  //   //       if (i < 9) {
+  //   //         anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
+  //   //       } else if ( i > 9) {
+  //   //         anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
+  //   //       } else {
+  //   //         anglePos = -15 * M_PI/180;
+  //   //       }
+  //   //     }
+  //   //     else {
+  //   //       biggestDifference = difference;
+  //   //       smallestDistance = distances[i];
+  //   //       if (i < 9) {
+  //   //         anglePos = 90 - (10 * (i-1)+15) * M_PI/180;
+  //   //       } else if ( i > 9) {
+  //   //         anglePos = 90 -(10 * (i-1)-15) * M_PI/180;
+  //   //       } else {
+  //   //         anglePos = -15 * M_PI/180;
+  //   //       }
+  //   //     } 
+  //   //   }
+  //     // Vector2f avoidVector =  Eigen::Rotation2Df(anglePos) * robotState.getFrontVector();
+  //     // avoidVector = avoidVector * (1.5 * smallestDistance);
+  //     // targetPos = robotState.getPosition() + avoidVector;
+  //     // freezeTarget = true;
+  //     // firstBackup = false;
+  //   // }
+  // } else {
 
-    float distanceError = 2*DRIVE_EPSILON;
-    if (millis() - lastPosUpdate < MOVEMENT_TIMEOUT) {
-      distanceError = moveToTarget();
-    } else {
-      stopRobot();
-    }
+  //   float distanceError = 2*DRIVE_EPSILON;
+  //   if (millis() - lastPosUpdate < MOVEMENT_TIMEOUT) {
+  //     distanceError = moveToTarget();
+  //   } else {
+  //     stopRobot();
+  //   }
 
 
-    if (distanceError < DRIVE_EPSILON / 2) {
-      freezeTarget = false;
-      firstBackup = true;
-      state = BALL;
-    }
-  }
+  //   if (distanceError < DRIVE_EPSILON / 2) {
+  //     freezeTarget = false;
+  //     firstBackup = true;
+  //     state = BALL;
+  //   }
+  // }
   
 
   
@@ -328,10 +359,10 @@ void backupState() {
 void standbyState(int numBalls) {
   stopRobot();
   digitalWrite(INDICATOR_PIN, HIGH);
-  BallPosition temp[NUM_BALLS];
-  if (chooseBallTarget(temp, NUM_BALLS) > 0) {
-    state = BALL;
-  }
+  // BallPosition temp[NUM_BALLS];
+  // if (chooseBallTarget(temp, NUM_BALLS) > 0) {
+  //   state = BALL;
+  // }
 }
 
 
@@ -365,21 +396,25 @@ void approachState() {
 
   // release the balls
   if (distanceError < DRIVE_EPSILON/2) {
-    Serial.println("Releasing balls");
     stopRobot();
-    openGate();
-    delay(1000);
-    setServo3Speed(-100);
-    setServo4Speed(-100);
-    delay(2500);
-    closeGate();
-
-    freezeTarget = false;
-    rotating = true;
-    targetPos = Eigen::Vector2f(1000,1000); // so it doesn't immediately try to approach
-    ballCount = 0;
-    state = BALL;
   }
+
+  if (millis() > BALL_RELEASE_TIME) {
+      Serial.println("Releasing balls");
+      stopRobot();
+      openGate();
+      delay(2000);
+      setServo3Speed(-100);
+      setServo4Speed(-100);
+      delay(3000);
+      closeGate();
+
+      freezeTarget = false;
+      rotating = true;
+      targetPos = Eigen::Vector2f(1000,1000); // so it doesn't immediately try to approach
+      ballCount = 0;
+      state = STANDBY;
+    }
  }
 
 
@@ -482,11 +517,12 @@ void openGate() {
 }
 
 void closeGate() {
-  gateMotor.write(90);
+  gateMotor.write(180);
 }
 
 void setDC(double rot) {
-  Serial.printf("dcPosition: %f\n", getPosition1());
-  setSetpoint1(((-rot)/180)*1400);
+  // Serial.printf("dcOutput: %f\n", getOutput1());
+  // Serial.printf("setDC setpoint: %f\n", ((-rot)/180)*1400);
+  setSetpoint1(-rot);
 }
 

@@ -163,7 +163,7 @@ const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) - 1);
             uxSavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
 
             // TODO: CONVERT POSITION FROM ENCODER TICKS TO ANGULAR POSITION. 
-            measure1 = position1;
+            measure1 = (360.0/2800)*position1;
 
             taskEXIT_CRITICAL_FROM_ISR(uxSavedInterruptStatus);
             
