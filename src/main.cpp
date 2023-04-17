@@ -24,12 +24,12 @@ using namespace std;
 #define LEFT_SWITCH 18
 #define RIGHT_SWITCH 19
 #define GATE_PIN 16 
-#define HOME_POS 1870,1870
-// #define HOME_POS 130, 130
+// #define HOME_POS 1870,1870
+#define HOME_POS 130, 130
 #define OBSTACLE_EPSILON 200
 #define AVOID_TO_FAR_EPSILON 500
-#define BALL_RELEASE_TIME 270000
-#define DRIVE_HOME_TIME 210000
+#define BALL_RELEASE_TIME 280000
+#define DRIVE_HOME_TIME 240000
 
 
 #define MOVEMENT_TIMEOUT 500
@@ -72,7 +72,7 @@ void setup() {
   Serial.begin(115200);
   setupDCMotors();
   setupServos();
-  // setupCommunications();
+  setupCommunications();
 
   pinMode(INDICATOR_PIN, OUTPUT);
   pinMode(LEFT_SWITCH, INPUT_PULLDOWN);
@@ -143,11 +143,11 @@ void loop() {
 
   // Update ball info only if all requirements are met
   int numBalls = getBallPositions(ballArray);
-  printBallPositions(numBalls,ballArray);
+  // printBallPositions(numBalls,ballArray);
   if (millis() > updateTarget && !freezeTarget) { 
     if(numBalls > 0 && chooseBallTarget(ballArray, numBalls)) {
       updateTarget = millis() + 2500;
-    } else {
+    } else if (millis() < DRIVE_HOME_TIME) {
       stopRobot();
     }
   }
@@ -155,7 +155,6 @@ void loop() {
 
   if(millis() > DRIVE_HOME_TIME && state != STANDBY) {
     freezeTarget = true;
-    rotating = true;
     targetPos = Eigen::Vector2f(HOME_POS);
     state = HOME;
   }
@@ -368,11 +367,11 @@ void standbyState(int numBalls) {
 
 void approachState() {
   //  Vector2f currentPos = robotState.getPosition();
-  // openGate();
+  openGate();
   setServo3Speed(100);
   setServo4Speed(100);
   delay(2000);
-  // closeGate();
+  closeGate();
   stopRobot();
 
   ballCount++;
